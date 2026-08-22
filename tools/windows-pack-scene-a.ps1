@@ -94,14 +94,28 @@ try {
 
     Write-Host ""
     Write-Host "Packing Tier A scene + minimal core assets for Intel Mac testing..." -ForegroundColor Cyan
-    Compress-Archive -Path $StageScene -DestinationPath $Zip -CompressionLevel Optimal
+
+    # Prefer Windows bsdtar over Compress-Archive. Compress-Archive stores
+    # Windows-style backslash paths and can result in unusable directory mode
+    # metadata when macOS Archive Utility/unzip extracts the archive.
+    $Tar = Get-Command tar.exe -ErrorAction SilentlyContinue
+    if ($null -ne $Tar) {
+        & $Tar.Source -a -c -f $Zip -C $StageRoot $SceneName
+        if ($LASTEXITCODE -ne 0) {
+            throw "tar.exe failed to create ZIP (exit code $LASTEXITCODE)"
+        }
+    }
+    else {
+        Write-Warning "tar.exe not found; falling back to Compress-Archive. On macOS you may need to normalize extracted permissions."
+        Compress-Archive -Path $StageScene -DestinationPath $Zip -CompressionLevel Optimal
+    }
 
     Write-Host ""
     Write-Host "Done." -ForegroundColor Green
     Write-Host "Transfer this file to the Intel Mac:"
     Write-Host "  $Zip"
     Write-Host ""
-    Write-Host "The ZIP now contains only the test scene plus the core shader headers needed by effects."
+    Write-Host "The ZIP contains only the test scene plus the core shader headers needed by effects."
 }
 finally {
     if (Test-Path $StageRoot) {
