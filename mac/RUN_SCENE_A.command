@@ -20,10 +20,21 @@ fail() {
 PKG="$(find "$TEST_ROOT" -type f -name 'scene.pkg' -print -quit)"
 [[ -n "$PKG" ]] || fail "No scene.pkg found under: $TEST_ROOT"
 
+ASSETS="$TEST_ROOT/core-assets"
+ARGS=(-p "$PKG" -m winit -l debug)
+if [[ -d "$ASSETS" ]]; then
+  ARGS+=(--assets-path "$ASSETS")
+fi
+
 echo "=== WaifuX Intel Scene Tier A Test ==="
 echo "Renderer: $BIN"
 echo "Scene:    $PKG"
 echo "Mode:     $MODE"
+if [[ -d "$ASSETS" ]]; then
+  echo "Assets:   $ASSETS"
+else
+  echo "Assets:   (none; static mode may work, full effects can miss WE core headers)"
+fi
 echo
 echo "The renderer opens a fullscreen test surface."
 echo "Return to this Terminal and press Ctrl+C to stop it."
@@ -33,7 +44,7 @@ export WGPU_BACKEND=metal
 export RUST_BACKTRACE=1
 
 if [[ "$MODE" == "full" ]]; then
-  exec "$BIN" -p "$PKG" -m winit --target-fps 30 -l debug
+  exec "$BIN" "${ARGS[@]}" --target-fps 30
 else
-  exec "$BIN" -p "$PKG" -m winit --no-effects -l debug
+  exec "$BIN" "${ARGS[@]}" --no-effects
 fi
