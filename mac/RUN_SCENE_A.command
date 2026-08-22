@@ -17,6 +17,12 @@ fail() {
 [[ -x "$BIN" ]] || fail "Experimental renderer not found. Run BUILD_SCENE_EXPERIMENTAL.command first."
 [[ -d "$TEST_ROOT" ]] || fail "Scene test folder not found: $TEST_ROOT"
 
+# Archives produced on Windows can occasionally extract with restrictive
+# directory mode/ACL metadata on macOS. Normalize best-effort before walking
+# the scene tree so core-assets and shader files remain readable.
+chmod -RN "$TEST_ROOT" 2>/dev/null || true
+chmod -R u+rwX "$TEST_ROOT" 2>/dev/null || true
+
 PKG="$(find "$TEST_ROOT" -type f -name 'scene.pkg' -print -quit)"
 [[ -n "$PKG" ]] || fail "No scene.pkg found under: $TEST_ROOT"
 
