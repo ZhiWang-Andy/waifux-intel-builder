@@ -5,7 +5,8 @@ WORKROOT="$HOME/Library/Application Support/WaifuX Intel Scene Experimental"
 BRIDGE="$WORKROOT/bin/waifux-system-audio-bridge"
 AUDIO_FILE="$WORKROOT/live-audio-spectrum.txt"
 RUNNER="${RUN_SCENE_A_PATH:-$HOME/Downloads/RUN_SCENE_A.command}"
-GAIN="${WAIFUX_AUDIO_GAIN:-6}"
+GAIN="${WAIFUX_AUDIO_GAIN:-10}"
+MODE="${WAIFUX_AUDIO_MODE:-fft}"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -31,11 +32,12 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "=== Starting macOS system-audio bridge ==="
+echo "Mode:      $MODE"
 echo "Gain:      ${GAIN}x"
 echo "Spectrum:  $AUDIO_FILE"
 echo
 
-WAIFUX_AUDIO_GAIN="$GAIN" "$BRIDGE" "$AUDIO_FILE" &
+WAIFUX_AUDIO_MODE="$MODE" WAIFUX_AUDIO_GAIN="$GAIN" "$BRIDGE" "$AUDIO_FILE" &
 BRIDGE_PID=$!
 
 # Give ScreenCaptureKit time to start and/or show the first TCC prompt.
@@ -48,7 +50,11 @@ fi
 echo
 echo "=== Starting Scene renderer with live audio ==="
 echo "Play music with a clear bass/drum beat."
-echo "The bridge will print L/R envelope values roughly twice per second."
+if [[ "$MODE" == "fft" ]]; then
+  echo "The bridge will print L/R FFT peaks plus representative frequency bands roughly twice per second."
+else
+  echo "The bridge will print L/R RMS envelope values roughly twice per second."
+fi
 echo "Press Ctrl+C here to stop both processes."
 echo
 
