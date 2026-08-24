@@ -33,7 +33,12 @@ echo "=== Building WaifuX macOS system-audio bridge ==="
 echo "Source: $SRC"
 echo "Output: $OUT"
 
+# This source uses an explicit @main async entry point. With a single Swift
+# source file, swiftc otherwise treats the file as a script and reports that
+# @main cannot coexist with top-level code. -parse-as-library selects the
+# correct compilation mode for an explicit @main type.
 xcrun swiftc \
+  -parse-as-library \
   -swift-version 5 \
   -O \
   -framework Foundation \
