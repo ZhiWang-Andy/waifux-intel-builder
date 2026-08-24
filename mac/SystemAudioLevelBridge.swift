@@ -2,6 +2,7 @@ import Foundation
 import ScreenCaptureKit
 import CoreMedia
 import AudioToolbox
+import Darwin
 
 private enum BridgeError: Error, CustomStringConvertible {
     case noDisplay
