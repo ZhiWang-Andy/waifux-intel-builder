@@ -9,6 +9,7 @@ PIPELINE_RS="$SRC/src/scene/renderer/post_processor/pipeline_handler.rs"
 PARAM_RS="$SRC/src/scene/renderer/post_processor/effect_param.rs"
 APP_RS="$SRC/src/scene/renderer/app.rs"
 RENDER_RS="$SRC/src/scene/renderer/render_pass.rs"
+WINIT_RS="$SRC/src/scene/adapters/winit_adapter.rs"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -18,7 +19,7 @@ fail() {
 [[ "$(uname -s)" == "Darwin" ]] || fail "Run this on macOS."
 [[ "$(uname -m)" == "x86_64" ]] || fail "This rebuild is intended for Intel macOS."
 [[ -d "$SRC/.git" ]] || fail "Experimental source tree not found. Run BUILD_SCENE_EXPERIMENTAL.command first."
-for f in "$PIPELINE_RS" "$PARAM_RS" "$APP_RS" "$RENDER_RS"; do
+for f in "$PIPELINE_RS" "$PARAM_RS" "$APP_RS" "$RENDER_RS" "$WINIT_RS"; do
   [[ -f "$f" ]] || fail "Required source file not found: $f"
 done
 command -v cargo >/dev/null 2>&1 || fail "cargo is not available. Run: source \"$HOME/.cargo/env\""
@@ -26,15 +27,17 @@ command -v python3 >/dev/null 2>&1 || fail "python3 is required."
 
 cd "$SRC"
 
-echo "=== Patching audio-responsive shader plumbing (synthetic test source) ==="
-python3 - "$PIPELINE_RS" "$PARAM_RS" "$APP_RS" "$RENDER_RS" <<'PY'
+echo "=== Patching/repairing audio-responsive shader plumbing (synthetic test source) ==="
+python3 - "$PIPELINE_RS" "$PARAM_RS" "$APP_RS" "$RENDER_RS" "$WINIT_RS" <<'PY'
 from pathlib import Path
+import re
 import sys
 
 pipeline_path = Path(sys.argv[1])
 param_path = Path(sys.argv[2])
 app_path = Path(sys.argv[3])
 render_path = Path(sys.argv[4])
+winit_path = Path(sys.argv[5])
 
 # 1) Keep AUDIOPROCESSING enabled, but rewrite the fixed-size array-parameter
 # helper that Naga rejected. The helper reads the global uniform arrays instead.
@@ -153,24 +156,67 @@ if "Stage-1 audio validation" not in a:
     a = a.replace(marker, insertion, 1)
 app_path.write_text(a)
 
-# 4) Feed the spectra into both buffered-uniform and immediate/push-constant paths.
-r = render_path.read_text()
-if "audio_spectrum_left: user_params.audio_spectrum_left" not in r:
-    marker = '                    cursor_position: user_params.cursor_position,\n'
-    insertion = marker + '                    audio_spectrum_left: user_params.audio_spectrum_left,\n                    audio_spectrum_right: user_params.audio_spectrum_right,\n'
-    if marker not in r:
-        raise SystemExit("Buffered SystemUniforms marker not found")
-    r = r.replace(marker, insertion, 1)
+# 4) Cursor movement must not reconstruct UserParams (which would now require
+# audio fields and would also wipe the active spectrum). Update only cursor.
+w = winit_path.read_text()
+old_cursor = '''                        app.user_params =
+                            crate::scene::renderer::app::UserParams {
+                                cursor_position: [nx, ny],
+                            };
+'''
+new_cursor = '''                        app.user_params.cursor_position = [nx, ny];
+'''
+if old_cursor in w:
+    w = w.replace(old_cursor, new_cursor, 1)
+elif "app.user_params.cursor_position = [nx, ny];" not in w:
+    # Diagnostic builder may have changed surrounding whitespace, so fall back
+    # to a narrow regex matching the same initializer.
+    pattern = re.compile(
+        r'app\.user_params\s*=\s*\n\s*crate::scene::renderer::app::UserParams\s*\{\s*\n\s*cursor_position:\s*\[nx, ny\],\s*\n\s*\};',
+        re.MULTILINE,
+    )
+    w, n = pattern.subn('app.user_params.cursor_position = [nx, ny];', w, count=1)
+    if n == 0:
+        raise SystemExit("UserParams cursor initializer not found in winit_adapter.rs")
+winit_path.write_text(w)
 
-if r.count("audio_spectrum_left: user_params.audio_spectrum_left") < 2:
-    marker = '        cursor_position: user_params.cursor_position,\n'
-    insertion = marker + '        audio_spectrum_left: user_params.audio_spectrum_left,\n        audio_spectrum_right: user_params.audio_spectrum_right,\n'
-    if marker not in r:
-        raise SystemExit("Immediate SystemUniforms marker not found")
-    r = r.replace(marker, insertion, 1)
+# 5) Normalize every SystemUniforms initializer in render_pass.rs. The prior
+# script could match the second, less-indented marker inside the first block,
+# producing duplicate fields. Remove all audio field lines first, then add one
+# pair immediately after cursor_position in every SystemUniforms block.
+r = render_path.read_text()
+r = re.sub(r'^\s*audio_spectrum_left:\s*user_params\.audio_spectrum_left,\s*\n', '', r, flags=re.MULTILINE)
+r = re.sub(r'^\s*audio_spectrum_right:\s*user_params\.audio_spectrum_right,\s*\n', '', r, flags=re.MULTILINE)
+
+block_pattern = re.compile(r'(let sys = SystemUniforms \{\n)(.*?)(\n\s*\};)', re.DOTALL)
+blocks = list(block_pattern.finditer(r))
+if len(blocks) != 2:
+    raise SystemExit(f"Expected exactly 2 SystemUniforms initializers in render_pass.rs, found {len(blocks)}")
+
+out = []
+last = 0
+for m in blocks:
+    out.append(r[last:m.start()])
+    head, body, tail = m.group(1), m.group(2), m.group(3)
+    lines = body.splitlines()
+    new_lines = []
+    inserted = False
+    for line in lines:
+        new_lines.append(line)
+        if 'cursor_position: user_params.cursor_position,' in line:
+            indent = line[:len(line) - len(line.lstrip())]
+            new_lines.append(indent + 'audio_spectrum_left: user_params.audio_spectrum_left,')
+            new_lines.append(indent + 'audio_spectrum_right: user_params.audio_spectrum_right,')
+            inserted = True
+    if not inserted:
+        raise SystemExit("cursor_position field not found inside SystemUniforms initializer")
+    out.append(head + '\n'.join(new_lines) + tail)
+    last = m.end()
+out.append(r[last:])
+r = ''.join(out)
 render_path.write_text(r)
 
-print("Audio shader rewrite + synthetic 16-band spectrum plumbing applied")
+print("Audio shader rewrite + synthetic 16-band spectrum plumbing repaired/applied")
 PY
 
 echo
