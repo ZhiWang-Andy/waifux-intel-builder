@@ -33,10 +33,6 @@ echo "=== Building WaifuX macOS system-audio bridge ==="
 echo "Source: $SRC"
 echo "Output: $OUT"
 
-# This source uses an explicit @main async entry point. With a single Swift
-# source file, swiftc otherwise treats the file as a script and reports that
-# @main cannot coexist with top-level code. -parse-as-library selects the
-# correct compilation mode for an explicit @main type.
 xcrun swiftc \
   -parse-as-library \
   -swift-version 5 \
@@ -57,8 +53,11 @@ file "$OUT" | grep -q "x86_64" || fail "Bridge binary is not x86_64."
 
 echo
 echo "System-audio bridge build complete."
-echo "Standalone capture test:"
-echo "  WAIFUX_AUDIO_GAIN=6 \"$OUT\" \"$WORKROOT/live-audio-spectrum.txt\""
+echo "Default mode is now a real 2048-point FFT with 16 logarithmic bands."
+echo "Standalone FFT capture test:"
+echo "  WAIFUX_AUDIO_MODE=fft WAIFUX_AUDIO_GAIN=10 \"$OUT\" \"$WORKROOT/live-audio-spectrum.txt\""
 echo
-echo "While music is playing, the bridge should print changing L/R values."
+echo "RMS compatibility mode remains available:"
+echo "  WAIFUX_AUDIO_MODE=rms WAIFUX_AUDIO_GAIN=6 \"$OUT\" \"$WORKROOT/live-audio-spectrum.txt\""
+echo
 echo "First launch may require macOS Screen & System Audio Recording permission."
