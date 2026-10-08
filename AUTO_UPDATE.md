@@ -8,9 +8,11 @@ This repository provides an external update path for Intel Macs.
 
 ### GitHub side
 
-`.github/workflows/auto-build-latest.yml` checks the official WaifuX appcast every 30 minutes.
+Automatic checks, builds, and release publishing on GitHub are disabled.
 
-When a new upstream version appears, the workflow:
+`.github/workflows/auto-build-latest.yml` is now manual-only: it has no scheduled or push trigger. To check for a new version and build its Intel patch, open **Actions → Build Latest WaifuX Intel Patch (Manual) → Run workflow**.
+
+When started manually, the workflow:
 
 1. reads the latest official version from the same appcast used by WaifuX;
 2. clones the matching upstream `v<version>` tag;
@@ -19,9 +21,11 @@ When a new upstream version appears, the workflow:
 5. verifies both Mach-O binaries contain `x86_64`;
 6. publishes a release named `intel-v<version>` containing the matching patch ZIP.
 
-If the release already exists, the scheduled job exits without rebuilding it.
+If the release already exists, the workflow exits without rebuilding it.
 
 ### Intel Mac side
+
+A checker previously installed on an Intel Mac runs separately from GitHub. To stop that local checker too, use the uninstall command under **Disable automatic checking** below. With GitHub automatic builds disabled, a new matching patch must be built manually before the Mac updater can install it.
 
 `mac/WaifuX-Intel-AutoUpdater.command`:
 
