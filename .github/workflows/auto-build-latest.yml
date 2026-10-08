@@ -1,14 +1,7 @@
-name: Auto Build Latest WaifuX Intel Patch
+name: Build Latest WaifuX Intel Patch (Manual)
 
 on:
-  push:
-    paths:
-      - '.github/workflows/auto-build-latest.yml'
-  schedule:
-    # GitHub cron cannot express a true rolling "every 15 days" interval
-    # across months without extra runs/state. To minimize Actions usage, check
-    # twice per month: on the 1st and 16th at 12:17 UTC.
-    - cron: '17 12 1,16 * *'
+  # Automatic upstream checks and builds are disabled; run manually when needed.
   workflow_dispatch:
 
 permissions:
@@ -119,7 +112,7 @@ jobs:
             https://github.com/jipika/WaifuX.git \
             "refs/tags/v${VERSION}" >/dev/null 2>&1; then
             echo "Upstream appcast lists WaifuX $VERSION, but tag v$VERSION is not available yet."
-            echo "Will retry automatically on the next scheduled check."
+            echo "Run this workflow manually again after the upstream tag becomes available."
             echo "should_build=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
